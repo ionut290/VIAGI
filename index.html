@@ -35,6 +35,8 @@
           <button class="ghost-button" id="cancel-trip-button" type="button">Chiudi</button>
         </div>
         <form class="planner-form" id="trip-form">
+          <div class="analysis-status" id="analysis-status" hidden>⏳ Sto analizzando la prenotazione…</div>
+          <div class="error-list" id="error-list" hidden></div>
           <div class="mode-grid" aria-label="Modalità di inserimento">
             <span>📄 Carica PDF prenotazione</span>
             <span>🔗 Inserisci link prenotazione</span>
@@ -52,7 +54,7 @@
             <label>Numero persone<input id="people" type="number" min="1" value="2" /></label>
           </div>
           <div class="form-grid">
-            <label>Link prenotazione<input id="booking-source" type="url" placeholder="https://..." /></label>
+            <label>Link prenotazione<input id="booking-source" type="url" placeholder="https://booking.com/..." /></label>
             <label>PDF prenotazione<input id="booking-file" type="file" accept="application/pdf" /></label>
           </div>
           <div class="form-grid">
