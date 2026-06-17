@@ -14,16 +14,72 @@
           <p class="eyebrow">✈️ VIAGI · Viaggi Intelligente</p>
           <h1>Il tuo assistente personale di viaggio.</h1>
           <p class="hero-copy">
-            Apri l’app e trovi viaggi passati, presenti e futuri. Carica un PDF, incolla un link o inserisci i dati manualmente:
-            VIAGI estrae prenotazioni, crea pin Google Maps, stima budget e prepara la vacanza giorno per giorno.
+            VIAGI è multiutente: registrati, accedi e inserisci il codice viaggio fornito dall’amministratore.
+            Solo gli utenti autorizzati vedono riepilogo, mappa, budget, itinerario e documenti del viaggio.
           </p>
-          <button class="primary-action" id="add-trip-button" type="button">+ Nuovo viaggio</button>
+          <div class="hero-actions">
+            <button class="primary-action" id="add-trip-button" type="button">+ Nuovo viaggio</button>
+            <span id="user-role-badge" class="role-badge">Ospite</span>
+          </div>
         </div>
         <div class="summary-card">
           <span>Budget totale previsto</span>
           <strong id="total-budget">€0</strong>
           <small id="total-spent">Speso €0 · Resta €0</small>
         </div>
+      </section>
+
+      <section class="panel session-panel" id="session-panel" hidden>
+        <div>
+          <p class="eyebrow">Sessione attiva</p>
+          <h2>👤 <span id="session-user"></span></h2>
+        </div>
+        <button class="ghost-button" id="logout-button" type="button">Esci</button>
+      </section>
+
+      <section class="panel auth-panel" id="auth-panel">
+        <div class="panel-title compact">
+          <p class="eyebrow">Accesso multiutente</p>
+          <h2>Registrazione e login</h2>
+          <p class="muted">Account demo admin: <b>admin@viagi.local</b> / <b>admin123</b>. Gli utenti normali non vedono viaggi finché non inseriscono un codice valido.</p>
+        </div>
+        <div class="auth-grid">
+          <form class="planner-form" id="register-form">
+            <h3>📝 Registrati</h3>
+            <label>Email<input name="email" type="email" required placeholder="utente@email.it" /></label>
+            <label>Password<input name="password" type="password" required minlength="6" placeholder="Almeno 6 caratteri" /></label>
+            <button type="submit">Crea account</button>
+          </form>
+          <form class="planner-form" id="login-form">
+            <h3>🔑 Login</h3>
+            <label>Email<input name="email" type="email" required placeholder="admin@viagi.local" /></label>
+            <label>Password<input name="password" type="password" required placeholder="admin123" /></label>
+            <button type="submit">Accedi</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="panel access-panel" id="access-panel" hidden>
+        <div class="panel-title compact">
+          <p class="eyebrow">Codice viaggio</p>
+          <h2>Inserisci il codice dell’amministratore</h2>
+        </div>
+        <form class="access-form" id="access-form">
+          <label>Codice viaggio<input id="trip-code" required placeholder="VIAGI-ABC123" autocomplete="off" /></label>
+          <button class="primary-action" type="submit">Autorizza accesso</button>
+        </form>
+        <p class="access-message" id="access-message" hidden></p>
+      </section>
+
+      <section class="panel firebase-rules" id="firebase-rules-panel" hidden>
+        <p class="eyebrow">Schema Firebase suggerito</p>
+        <div class="rules-grid">
+          <span><b>users</b> profilo, email, ruolo</span>
+          <span><b>trips</b> ID privato e owner</span>
+          <span><b>tripAccessCodes</b> codice univoco e audit uso</span>
+          <span><b>tripMembers</b> utenti autorizzati per viaggio</span>
+        </div>
+        <p class="muted">Regola: un utente può leggere un viaggio solo se è admin o se esiste una membership tripMembers per quel tripId.</p>
       </section>
 
       <section class="panel form-panel" id="new-trip-panel" hidden>
@@ -70,7 +126,7 @@
         </form>
       </section>
 
-      <section class="dashboard">
+      <section class="dashboard" id="dashboard" hidden>
         <aside class="panel trip-list-panel">
           <div class="panel-title compact"><h2>📍 I tuoi viaggi</h2></div>
           <div id="trip-groups" class="trip-groups"></div>
