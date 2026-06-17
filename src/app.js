@@ -104,7 +104,7 @@ function writeJson(key, value) {
 }
 
 function loadUsers() {
-  return readJson(USERS_KEY, [{ id: 'admin-demo', email: 'admin@viagi.local', password: 'admin123', role: 'admin', createdAt: new Date().toISOString() }]);
+  return readJson(USERS_KEY, [{ id: 'admin-demo', email: 'Ionut29019@gmail.com', password: 'P@dova29', role: 'admin', createdAt: new Date().toISOString() }]);
 }
 
 function loadSession() {
