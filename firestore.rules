@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return signedIn() && userDoc().data.role == 'admin';
+    }
+
+    function isTripMember(tripId) {
+      return signedIn() && exists(/databases/$(database)/documents/tripMembers/$(tripId + '_' + request.auth.uid));
+    }
+
+    function canEditTrip(tripId) {
+      return isAdmin() || (
+        isTripMember(tripId) &&
+        get(/databases/$(database)/documents/tripMembers/$(tripId + '_' + request.auth.uid)).data.canEdit == true &&
+        get(/databases/$(database)/documents/trips/$(tripId)).data.allowMemberEdit == true
+      );
+    }
+
+    match /users/{userId} {
+      allow create: if signedIn() && request.auth.uid == userId;
+      allow read, update: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /trips/{tripId} {
+      allow create: if isAdmin();
+      allow read: if isAdmin() || isTripMember(tripId);
+      allow update: if canEditTrip(tripId);
+      allow delete: if isAdmin();
+    }
+
+    match /tripAccessCodes/{codeId} {
+      allow read, create, update, delete: if isAdmin();
+      // Normal users should redeem codes through a trusted Cloud Function so the full code list is never readable.
+    }
+
+    match /tripMembers/{memberId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.userId == request.auth.uid);
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+  }
+}

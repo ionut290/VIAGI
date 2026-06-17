@@ -1,4 +1,8 @@
 const STORAGE_KEY = 'viagi-intelligente-v1';
+const USERS_KEY = 'viagi-users-v1';
+const SESSION_KEY = 'viagi-session-v1';
+const ACCESS_CODES_KEY = 'viagi-trip-access-codes-v1';
+const MEMBERS_KEY = 'viagi-trip-members-v1';
 
 const today = new Date();
 today.setHours(0, 0, 0, 0);
@@ -43,9 +47,27 @@ const pinCategories = [
   ['hospital', '🏥', 'ospedale'],
 ];
 
+let users = loadUsers();
 let trips = normalizeTrips(loadTrips());
-let activeId = trips[0]?.id;
+let tripAccessCodes = loadTripAccessCodes();
+let tripMembers = loadTripMembers();
+let currentUser = loadSession();
+let activeId;
+ensureSeedData();
+activeId = getVisibleTrips()[0]?.id;
 
+const authPanel = document.querySelector('#auth-panel');
+const registerForm = document.querySelector('#register-form');
+const loginForm = document.querySelector('#login-form');
+const accessPanel = document.querySelector('#access-panel');
+const accessForm = document.querySelector('#access-form');
+const tripCodeInput = document.querySelector('#trip-code');
+const accessMessage = document.querySelector('#access-message');
+const sessionPanel = document.querySelector('#session-panel');
+const sessionUser = document.querySelector('#session-user');
+const logoutButton = document.querySelector('#logout-button');
+const userRoleBadge = document.querySelector('#user-role-badge');
+const firebaseRulesPanel = document.querySelector('#firebase-rules-panel');
 const formPanel = document.querySelector('#new-trip-panel');
 const form = document.querySelector('#trip-form');
 const tripGroups = document.querySelector('#trip-groups');
@@ -66,11 +88,45 @@ const endInput = document.querySelector('#end-date');
 const peopleInput = document.querySelector('#people');
 const analysisStatus = document.querySelector('#analysis-status');
 const errorList = document.querySelector('#error-list');
+const dashboard = document.querySelector('#dashboard');
+
+function readJson(key, fallback) {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved ? JSON.parse(saved) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function loadUsers() {
+  return readJson(USERS_KEY, [{ id: 'admin-demo', email: 'admin@viagi.local', password: 'admin123', role: 'admin', createdAt: new Date().toISOString() }]);
+}
+
+function loadSession() {
+  const userId = localStorage.getItem(SESSION_KEY);
+  return users.find((user) => user.id === userId) || null;
+}
+
+function loadTripAccessCodes() {
+  return readJson(ACCESS_CODES_KEY, []);
+}
+
+function loadTripMembers() {
+  return readJson(MEMBERS_KEY, []);
+}
+
+function saveUsers() { writeJson(USERS_KEY, users); }
+function saveAccessCodes() { writeJson(ACCESS_CODES_KEY, tripAccessCodes); }
+function saveTripMembers() { writeJson(MEMBERS_KEY, tripMembers); }
 
 function loadTrips() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : starterTrips;
+    return readJson(STORAGE_KEY, starterTrips);
   } catch {
     return starterTrips;
   }
@@ -100,8 +156,43 @@ function normalizeTrips(items) {
 }
 
 function saveTrips() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(trips));
+  writeJson(STORAGE_KEY, trips);
 }
+
+function generateTripCode() {
+  let code;
+  do {
+    code = `VIAGI-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  } while (tripAccessCodes.some((item) => item.code === code));
+  return code;
+}
+
+function ensureSeedData() {
+  trips.forEach((trip) => {
+    trip.privateId ||= crypto.randomUUID();
+    trip.ownerId ||= 'admin-demo';
+    trip.allowMemberEdit ??= false;
+  });
+  trips.forEach((trip) => {
+    if (!tripAccessCodes.some((item) => item.tripId === trip.id)) {
+      tripAccessCodes.push({ id: crypto.randomUUID(), tripId: trip.id, code: generateTripCode(), createdBy: trip.ownerId, createdAt: new Date().toISOString(), usedBy: [] });
+    }
+    if (!tripMembers.some((item) => item.tripId === trip.id && item.userId === trip.ownerId)) {
+      tripMembers.push({ id: crypto.randomUUID(), tripId: trip.id, userId: trip.ownerId, role: 'admin', canEdit: true, joinedAt: new Date().toISOString(), accessCodeId: null });
+    }
+  });
+  saveTrips();
+  saveAccessCodes();
+  saveTripMembers();
+}
+
+function isAdmin() { return currentUser?.role === 'admin'; }
+function getMembership(tripId) { return tripMembers.find((member) => member.tripId === tripId && member.userId === currentUser?.id); }
+function canViewTrip(trip) { return Boolean(currentUser && (isAdmin() || getMembership(trip.id))); }
+function canEditTrip(trip) { const membership = getMembership(trip.id); return Boolean(currentUser && (isAdmin() || (membership?.canEdit && trip.allowMemberEdit))); }
+function getVisibleTrips() { return currentUser ? trips.filter(canViewTrip) : []; }
+function getTripCode(tripId) { return tripAccessCodes.find((item) => item.tripId === tripId); }
+function getTripMembers(tripId) { return tripMembers.filter((member) => member.tripId === tripId).map((member) => ({ ...member, user: users.find((user) => user.id === member.userId) })); }
 
 async function saveTripsToCloud() {
   saveTrips();
@@ -254,8 +345,9 @@ function analyzeBooking({ name, city, country, accommodation, address, bookingSo
 }
 
 function renderTotals() {
-  const budget = trips.reduce((sum, trip) => sum + Number(trip.budget || 0), 0);
-  const spent = trips.reduce((sum, trip) => sum + Number(trip.spent || 0), 0);
+  const visibleTrips = getVisibleTrips();
+  const budget = visibleTrips.reduce((sum, trip) => sum + Number(trip.budget || 0), 0);
+  const spent = visibleTrips.reduce((sum, trip) => sum + Number(trip.spent || 0), 0);
   totalBudget.textContent = euro(budget);
   totalSpent.textContent = `Speso ${euro(spent)} · Resta ${euro(budget - spent)}`;
 }
@@ -275,7 +367,7 @@ function renderTripCard(trip) {
 function renderTripGroups() {
   const groups = [['past', '📚 Viaggi passati'], ['present', '🧭 Viaggi presenti / in corso'], ['future', '🔮 Viaggi futuri']];
   tripGroups.innerHTML = groups.map(([status, title]) => {
-    const items = trips.filter((trip) => getTripStatus(trip) === status);
+    const items = getVisibleTrips().filter((trip) => getTripStatus(trip) === status);
     return `<section class="trip-group"><h3>${title}</h3>${items.length ? items.map(renderTripCard).join('') : '<p class="empty">Nessun viaggio in questa sezione.</p>'}</section>`;
   }).join('');
 }
@@ -297,7 +389,8 @@ function renderBudget(trip) {
 }
 
 function renderItinerary(trip) {
-  return `<section class="section-card"><h3>🗓️ Itinerario giorno per giorno modificabile</h3><div class="timeline">${trip.itinerary.map((day) => `<article><strong>Giorno ${day.day} · ${escapeHtml(day.title)}</strong><textarea data-itinerary-day="${day.day}" aria-label="Modifica giorno ${day.day}">${escapeHtml(day.plan)}</textarea><small>🚶 ${escapeHtml(day.mobility)} · 📍 ${escapeHtml(day.distance)}</small><small>🍽️ ${escapeHtml(day.restaurants.join(' / '))}</small><small>✨ ${escapeHtml(day.tips)}</small></article>`).join('')}</div></section>`;
+  const editable = canEditTrip(trip);
+  return `<section class="section-card"><h3>🗓️ Itinerario giorno per giorno ${editable ? 'modificabile' : 'in sola lettura'}</h3><div class="timeline">${trip.itinerary.map((day) => `<article><strong>Giorno ${day.day} · ${escapeHtml(day.title)}</strong><textarea data-itinerary-day="${day.day}" aria-label="Modifica giorno ${day.day}" ${editable ? '' : 'readonly'}>${escapeHtml(day.plan)}</textarea><small>🚶 ${escapeHtml(day.mobility)} · 📍 ${escapeHtml(day.distance)}</small><small>🍽️ ${escapeHtml(day.restaurants.join(' / '))}</small><small>✨ ${escapeHtml(day.tips)}</small></article>`).join('')}</div></section>`;
 }
 
 function renderDocuments(trip) {
@@ -306,26 +399,52 @@ function renderDocuments(trip) {
 }
 
 function renderDiary(trip) {
-  return `<section class="section-card"><h3>📔 Diario di viaggio</h3><div class="diary-grid">${trip.diary.map((day) => `<article><strong>Giorno ${day.day}</strong><p>📷 Foto · 🎥 Video · 📝 Note · 💳 Spese ${euro(day.expenses)} · ⭐ ${day.rating || 'da valutare'}</p><textarea data-diary-day="${day.day}" placeholder="Scrivi note della giornata...">${escapeHtml(day.notes)}</textarea></article>`).join('')}</div></section>`;
+  const editable = canEditTrip(trip);
+  return `<section class="section-card"><h3>📔 Diario di viaggio</h3><div class="diary-grid">${trip.diary.map((day) => `<article><strong>Giorno ${day.day}</strong><p>📷 Foto · 🎥 Video · 📝 Note · 💳 Spese ${euro(day.expenses)} · ⭐ ${day.rating || 'da valutare'}</p><textarea data-diary-day="${day.day}" placeholder="Scrivi note della giornata..." ${editable ? '' : 'readonly'}>${escapeHtml(day.notes)}</textarea></article>`).join('')}</div></section>`;
+}
+
+function renderAdminTripTools(trip) {
+  if (!isAdmin()) return '';
+  const code = getTripCode(trip.id);
+  const members = getTripMembers(trip.id);
+  return `<section class="section-card admin-tools"><h3>🔐 Admin viaggio</h3><div class="admin-grid"><span>ID privato <b>${escapeHtml(trip.privateId)}</b></span><span>Codice viaggio univoco <b>${escapeHtml(code?.code || 'Da generare')}</b></span><span>Modifica utenti <b>${trip.allowMemberEdit ? 'Permessa' : 'Bloccata'}</b></span></div><button class="ghost-button" id="toggle-member-edit" type="button">${trip.allowMemberEdit ? 'Blocca modifiche utenti' : 'Permetti modifiche utenti'}</button><h4>Utenti collegati</h4><div class="member-list">${members.map((member) => `<span>${escapeHtml(member.user?.email || member.userId)} · ${escapeHtml(member.role)} · ${member.canEdit ? 'può modificare' : 'sola lettura'} · ${escapeHtml(formatDate(member.joinedAt.slice(0, 10)))}</span>`).join('') || '<span>Nessun utente collegato.</span>'}</div></section>`;
 }
 
 function renderDetails() {
-  const trip = trips.find((item) => item.id === activeId) || trips[0];
+  const visibleTrips = getVisibleTrips();
+  const trip = visibleTrips.find((item) => item.id === activeId) || visibleTrips[0];
   if (!trip) {
-    details.innerHTML = '<p class="empty">Nessun viaggio selezionato. Premi “+ Nuovo viaggio” per iniziare.</p>';
+    details.innerHTML = currentUser ? '<p class="empty">Nessun viaggio autorizzato. Inserisci un codice viaggio fornito dall’amministratore.</p>' : '<p class="empty">Accedi o registrati per vedere i tuoi viaggi.</p>';
     return;
   }
-  details.innerHTML = `<div class="details-cover" style="background-image:url('${escapeHtml(trip.coverPhoto)}')"><button class="icon-button" id="delete-trip" aria-label="Elimina viaggio">🗑️</button></div>
+  details.innerHTML = `<div class="details-cover" style="background-image:url('${escapeHtml(trip.coverPhoto)}')">${isAdmin() ? '<button class="icon-button" id="delete-trip" aria-label="Elimina viaggio">🗑️</button>' : ''}</div>
     <div class="details-head"><div><p class="eyebrow">${escapeHtml(tripDates(trip))} · ${daysBetween(trip.startDate, trip.endDate)} giorni</p><h2>${escapeHtml(trip.name)}</h2><p>${escapeHtml(trip.city)}, ${escapeHtml(trip.country)}</p></div></div>
     <div class="info-grid">
       <article class="info-card"><span>🏨 Alloggio</span><strong>${escapeHtml(trip.accommodation)}</strong><small>${escapeHtml(trip.address)}</small></article>
       <article class="info-card"><span>👥 Persone</span><strong>${trip.people}</strong><small>${escapeHtml(trip.bookingSource || 'Inserimento manuale')}</small></article>
       <article class="info-card"><span>🚗 Trasporti</span><strong>${[...trip.transports.flights, ...trip.transports.trains, ...trip.transports.rentalCars].length || 'Da completare'}</strong><small>voli, treni e auto a noleggio rilevati dall’analisi</small></article>
     </div>
-    ${renderMapPins(trip.pins)}${renderBudget(trip)}${renderItinerary(trip)}${renderDocuments(trip)}${renderDiary(trip)}`;
+    ${renderAdminTripTools(trip)}${renderMapPins(trip.pins)}${renderBudget(trip)}${renderItinerary(trip)}${renderDocuments(trip)}${renderDiary(trip)}`;
+}
+
+function renderAuthState() {
+  const logged = Boolean(currentUser);
+  authPanel.hidden = logged;
+  sessionPanel.hidden = !logged;
+  accessPanel.hidden = !logged || isAdmin();
+  formPanel.hidden = true;
+  addTripButton.hidden = !isAdmin();
+  firebaseRulesPanel.hidden = !logged;
+  dashboard.hidden = !logged;
+  if (logged) {
+    sessionUser.textContent = currentUser.email;
+    userRoleBadge.textContent = isAdmin() ? 'Admin' : 'Utente normale';
+  }
 }
 
 function render() {
+  renderAuthState();
+  if (!currentUser) return;
   renderTotals();
   renderTripGroups();
   renderDetails();
@@ -339,7 +458,47 @@ function applyBookingPreview() {
   if (!addressInput.value.trim() && city) addressInput.value = `Indirizzo rilevato automaticamente, ${city}`;
 }
 
+registerForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const email = registerForm.querySelector('[name="email"]').value.trim().toLowerCase();
+  const password = registerForm.querySelector('[name="password"]').value;
+  if (users.some((user) => user.email === email)) return showAccessMessage('Email già registrata.', false);
+  const user = { id: crypto.randomUUID(), email, password, role: 'user', createdAt: new Date().toISOString() };
+  users.push(user); saveUsers(); currentUser = user; localStorage.setItem(SESSION_KEY, user.id); registerForm.reset(); activeId = getVisibleTrips()[0]?.id; render();
+});
+
+loginForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const email = loginForm.querySelector('[name="email"]').value.trim().toLowerCase();
+  const password = loginForm.querySelector('[name="password"]').value;
+  const user = users.find((item) => item.email === email && item.password === password);
+  if (!user) return showAccessMessage('Credenziali non valide.', false);
+  currentUser = user; localStorage.setItem(SESSION_KEY, user.id); loginForm.reset(); activeId = getVisibleTrips()[0]?.id; render();
+});
+
+function showAccessMessage(message, ok) {
+  accessMessage.hidden = false;
+  accessMessage.textContent = message;
+  accessMessage.className = `access-message ${ok ? 'success' : 'error'}`;
+}
+
+accessForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const codeValue = tripCodeInput.value.trim().toUpperCase();
+  const code = tripAccessCodes.find((item) => item.code === codeValue);
+  if (!code) return showAccessMessage('Codice viaggio non valido. Contatta l’amministratore.', false);
+  if (!tripMembers.some((member) => member.tripId === code.tripId && member.userId === currentUser.id)) {
+    tripMembers.push({ id: crypto.randomUUID(), tripId: code.tripId, userId: currentUser.id, role: 'member', canEdit: false, joinedAt: new Date().toISOString(), accessCodeId: code.id });
+  }
+  code.usedBy ||= [];
+  code.usedBy.push({ userId: currentUser.id, usedAt: new Date().toISOString() });
+  saveTripMembers(); saveAccessCodes(); activeId = code.tripId; tripCodeInput.value = ''; showAccessMessage('Accesso al viaggio autorizzato.', true); render();
+});
+
+logoutButton.addEventListener('click', () => { currentUser = null; localStorage.removeItem(SESSION_KEY); activeId = undefined; render(); });
+
 addTripButton.addEventListener('click', () => {
+  if (!isAdmin()) return;
   formPanel.hidden = false;
   nameInput.focus();
 });
@@ -389,7 +548,14 @@ form.addEventListener('submit', async (event) => {
     ? splitLines(document.querySelector('#itinerary').value).map((plan, index) => ({ day: index + 1, date: formatDate(addDays(startDate, index)), title: `Piano manuale ${index + 1}`, plan, mobility: 'Da calcolare', distance: 'Da calcolare', restaurants: [`Ristoranti consigliati a ${city}`], tips: 'Completa con AI/Places API' }))
     : buildItinerary(newTrip);
   newTrip.diary = buildDiary(newTrip);
+  newTrip.privateId = crypto.randomUUID();
+  newTrip.ownerId = currentUser.id;
+  newTrip.allowMemberEdit = false;
   trips = [newTrip, ...trips];
+  tripAccessCodes.push({ id: crypto.randomUUID(), tripId: newTrip.id, code: generateTripCode(), createdBy: currentUser.id, createdAt: new Date().toISOString(), usedBy: [] });
+  tripMembers.push({ id: crypto.randomUUID(), tripId: newTrip.id, userId: currentUser.id, role: 'admin', canEdit: true, joinedAt: new Date().toISOString(), accessCodeId: null });
+  saveAccessCodes();
+  saveTripMembers();
   activeId = newTrip.id;
   await saveTripsToCloud();
   form.reset();
@@ -406,9 +572,15 @@ tripGroups.addEventListener('click', (event) => {
 });
 
 details.addEventListener('click', (event) => {
-  if (event.target.closest('#delete-trip')) {
+  if (event.target.closest('#toggle-member-edit')) {
+    const trip = trips.find((item) => item.id === activeId);
+    if (!trip || !isAdmin()) return;
+    if (trip) { trip.allowMemberEdit = !trip.allowMemberEdit; saveTrips(); render(); }
+    return;
+  }
+  if (event.target.closest('#delete-trip') && isAdmin()) {
     trips = trips.filter((trip) => trip.id !== activeId);
-    activeId = trips[0]?.id;
+    activeId = getVisibleTrips()[0]?.id;
     saveTrips();
     render();
   }
@@ -416,6 +588,7 @@ details.addEventListener('click', (event) => {
 
 details.addEventListener('input', (event) => {
   const trip = trips.find((item) => item.id === activeId);
+  if (!trip || !canEditTrip(trip)) return;
   const itineraryDay = event.target.dataset.itineraryDay;
   if (itineraryDay) {
     const entry = trip?.itinerary.find((item) => String(item.day) === itineraryDay);
