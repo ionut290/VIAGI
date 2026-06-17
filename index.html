@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="VIAGI organizza viaggi, hotel, programmi, prenotazioni, budget e promemoria." />
+    <title>VIAGI - Planner viaggi</title>
+    <link rel="stylesheet" href="src/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">✈️ VIAGI</p>
+          <h1>Organizza viaggi, hotel, prenotazioni, budget e promemoria in un solo posto.</h1>
+          <p class="hero-copy">
+            Crea schede viaggio complete, controlla quanto resta da spendere e tieni a portata di mano programmi,
+            alloggi e cose da ricordare prima della partenza.
+          </p>
+        </div>
+        <div class="summary-card">
+          <span>Budget totale</span>
+          <strong id="total-budget">€0</strong>
+          <small id="total-spent">Speso €0 · Resta €0</small>
+        </div>
+      </section>
+
+      <section class="dashboard">
+        <form class="panel planner-form" id="trip-form">
+          <h2>➕ Nuovo viaggio</h2>
+          <label>Destinazione<input id="destination" required placeholder="Es. Tokyo" /></label>
+          <label>Date<input id="dates" placeholder="Es. 4-14 Ottobre" /></label>
+          <label>Albergo / alloggio<input id="hotel" placeholder="Nome hotel, indirizzo, check-in" /></label>
+          <div class="split">
+            <label>Budget (€)<input id="budget" type="number" min="0" /></label>
+            <label>Già speso (€)<input id="spent" type="number" min="0" /></label>
+          </div>
+          <label>Prenotamenti<input id="booking" placeholder="Voli, treni, auto, attività" /></label>
+          <label>Programma<textarea id="itinerary" placeholder="Una attività per riga"></textarea></label>
+          <label>Promemoria<textarea id="reminders" placeholder="Una cosa da ricordare per riga"></textarea></label>
+          <button type="submit">Salva viaggio</button>
+        </form>
+
+        <aside class="panel trip-list">
+          <h2>📍 I tuoi viaggi</h2>
+          <div id="trip-list"></div>
+        </aside>
+
+        <section class="panel details" id="trip-details" aria-live="polite"></section>
+      </section>
+    </main>
+
+    <script src="src/app.js"></script>
+  </body>
+</html>
