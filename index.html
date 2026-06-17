@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="VIAGI organizza viaggi, hotel, programmi, prenotazioni, budget e promemoria." />
-    <title>VIAGI - Planner viaggi</title>
+    <meta name="description" content="VIAGI organizza automaticamente prenotazioni, mappe, budget e itinerari giorno per giorno." />
+    <title>VIAGI - Planner viaggi automatico</title>
     <link rel="stylesheet" href="src/styles.css" />
   </head>
   <body>
@@ -12,10 +12,10 @@
       <section class="hero">
         <div>
           <p class="eyebrow">✈️ VIAGI</p>
-          <h1>Organizza viaggi, hotel, prenotazioni, budget e promemoria in un solo posto.</h1>
+          <h1>Apri l'app e trovi subito viaggi passati, presenti e futuri.</h1>
           <p class="hero-copy">
-            Crea schede viaggio complete, controlla quanto resta da spendere e tieni a portata di mano programmi,
-            alloggi e cose da ricordare prima della partenza.
+            Aggiungi un viaggio incollando il link o caricando il PDF della prenotazione: VIAGI prepara pin sulla mappa,
+            budget stimato, luoghi consigliati e programma giorno per giorno.
           </p>
         </div>
         <div class="summary-card">
@@ -27,23 +27,27 @@
 
       <section class="dashboard">
         <form class="panel planner-form" id="trip-form">
-          <h2>➕ Nuovo viaggio</h2>
+          <h2>➕ Aggiungi viaggio</h2>
           <label>Destinazione<input id="destination" required placeholder="Es. Tokyo" /></label>
-          <label>Date<input id="dates" placeholder="Es. 4-14 Ottobre" /></label>
-          <label>Albergo / alloggio<input id="hotel" placeholder="Nome hotel, indirizzo, check-in" /></label>
           <div class="split">
-            <label>Budget (€)<input id="budget" type="number" min="0" /></label>
+            <label>Partenza<input id="start-date" type="date" required /></label>
+            <label>Rientro<input id="end-date" type="date" /></label>
+          </div>
+          <label>Link prenotazione<input id="booking-source" type="url" placeholder="https://... oppure lascia vuoto se carichi PDF" /></label>
+          <label>PDF prenotazione<input id="booking-file" type="file" accept="application/pdf" /></label>
+          <label>Albergo / alloggio<input id="hotel" placeholder="Compilato anche in automatico" /></label>
+          <div class="split">
+            <label>Budget (€)<input id="budget" type="number" min="0" placeholder="Stimato se vuoto" /></label>
             <label>Già speso (€)<input id="spent" type="number" min="0" /></label>
           </div>
-          <label>Prenotamenti<input id="booking" placeholder="Voli, treni, auto, attività" /></label>
-          <label>Programma<textarea id="itinerary" placeholder="Una attività per riga"></textarea></label>
-          <label>Promemoria<textarea id="reminders" placeholder="Una cosa da ricordare per riga"></textarea></label>
-          <button type="submit">Salva viaggio</button>
+          <label>Programma manuale opzionale<textarea id="itinerary" placeholder="Se vuoi, una attività per riga. Altrimenti lo crea VIAGI."></textarea></label>
+          <label>Promemoria<textarea id="reminders" placeholder="Documenti, bagagli, check-in..."></textarea></label>
+          <button type="submit">Genera viaggio automatico</button>
         </form>
 
-        <aside class="panel trip-list">
+        <aside class="panel trip-list-panel">
           <h2>📍 I tuoi viaggi</h2>
-          <div id="trip-list"></div>
+          <div id="trip-groups" class="trip-groups"></div>
         </aside>
 
         <section class="panel details" id="trip-details" aria-live="polite"></section>
