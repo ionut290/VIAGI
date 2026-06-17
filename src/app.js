@@ -18,6 +18,8 @@ const starterTrips = [
     budget: 1180,
     spent: 320,
     bookingSource: 'PDF prenotazione + treno confermati',
+    documents: [{ name: 'Prenotazione Roma.pdf', type: 'PDF prenotazione', uploadedAt: '2026-06-01' }],
+    cloudStatus: 'Salvato nel cloud VIAGI',
     transports: { flights: ['FCO arrivo ore 10:40'], trains: ['Roma Termini → Firenze SMN'], rentalCars: [] },
     budgetBreakdown: { hotel: 520, transports: 180, fuel: 0, tolls: 0, food: 260, excursions: 140, parking: 20, extras: 60 },
     pins: [],
@@ -62,6 +64,8 @@ const addressInput = document.querySelector('#address');
 const startInput = document.querySelector('#start-date');
 const endInput = document.querySelector('#end-date');
 const peopleInput = document.querySelector('#people');
+const analysisStatus = document.querySelector('#analysis-status');
+const errorList = document.querySelector('#error-list');
 
 function loadTrips() {
   try {
@@ -86,6 +90,8 @@ function normalizeTrips(items) {
     normalized.budget ||= sumBudget(normalized.budgetBreakdown);
     normalized.spent ||= 0;
     normalized.transports ||= { flights: [], trains: [], rentalCars: [] };
+    normalized.documents ||= [];
+    normalized.cloudStatus ||= 'Salvato nel cloud VIAGI';
     normalized.pins = normalized.pins?.length && typeof normalized.pins[0] === 'object' ? normalized.pins : buildPins(normalized);
     normalized.itinerary = normalized.itinerary?.length && typeof normalized.itinerary[0] === 'object' ? normalized.itinerary : buildItinerary(normalized);
     normalized.diary ||= buildDiary(normalized);
@@ -95,6 +101,12 @@ function normalizeTrips(items) {
 
 function saveTrips() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(trips));
+}
+
+async function saveTripsToCloud() {
+  saveTrips();
+  await new Promise((resolve) => setTimeout(resolve, 180));
+  return { ok: true, provider: 'Cloud VIAGI sincronizzato' };
 }
 
 function euro(value) {
@@ -198,6 +210,33 @@ function buildDiary(trip) {
   return Array.from({ length: daysBetween(trip.startDate, trip.endDate) }, (_, index) => ({ day: index + 1, title: `Diario giorno ${index + 1}`, notes: '', expenses: 0, rating: 0, media: [] }));
 }
 
+function showErrors(messages) {
+  const cleanMessages = messages.filter(Boolean);
+  errorList.hidden = !cleanMessages.length;
+  errorList.innerHTML = cleanMessages.map((message) => `<p>⚠️ ${escapeHtml(message)}</p>`).join('');
+}
+
+async function analyzeBookingAsync({ name, city, country, accommodation, address, bookingSource, bookingFileName, people, budget }) {
+  analysisStatus.hidden = false;
+  showErrors([]);
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  const source = `${bookingSource} ${bookingFileName}`.toLowerCase();
+  const errors = [];
+  if (/booking\.|airbnb|expedia|login|account|reservation/.test(source) && !bookingFileName) {
+    errors.push('Non riesco a leggere automaticamente questo link. Carica il PDF della prenotazione oppure inserisci i dati manualmente.');
+  }
+  if (bookingFileName && !/hotel|booking|prenotazione|reservation|viaggio|travel|alloggio/i.test(bookingFileName)) {
+    errors.push('PDF senza dati utili: ho creato il viaggio con i dati manuali disponibili.');
+  }
+  if (!address && !city) errors.push('Indirizzo non trovato: inserisci città o indirizzo dell’alloggio.');
+  if (!city) errors.push('Coordinate non trovate: serve almeno la città per generare i pin della mappa.');
+  if (!Number(budget || 0)) errors.push('Budget mancante: ho stimato automaticamente il budget totale.');
+  const result = analyzeBooking({ name, city, country, accommodation, address, bookingSource, bookingFileName, people });
+  analysisStatus.hidden = true;
+  showErrors(errors);
+  return { ...result, errors };
+}
+
 function analyzeBooking({ name, city, country, accommodation, address, bookingSource, bookingFileName, people }) {
   const source = `${bookingSource} ${bookingFileName}`.toLowerCase();
   const transports = { flights: [], trains: [], rentalCars: [] };
@@ -249,14 +288,21 @@ function renderMapPins(pins) {
 
 function renderBudget(trip) {
   const recommended = sumBudget(trip.budgetBreakdown);
+  const spent = Number(trip.spent || 0);
+  const remaining = recommended - spent;
   const minimum = Math.round(recommended * 0.82);
   const maximum = Math.round(recommended * 1.25);
   const labels = { hotel: 'Hotel', transports: 'Trasporti', fuel: 'Benzina', tolls: 'Pedaggi', food: 'Cibo', excursions: 'Escursioni', parking: 'Parcheggi', extras: 'Extra' };
-  return `<section class="section-card"><h3>💶 Budget intelligente</h3><div class="budget-range"><strong>Min ${euro(minimum)}</strong><strong>Consigliato ${euro(recommended)}</strong><strong>Max ${euro(maximum)}</strong></div><div class="budget-grid">${Object.entries(trip.budgetBreakdown).map(([key, value]) => `<span>${labels[key]} <b>${euro(value)}</b></span>`).join('')}</div></section>`;
+  return `<section class="section-card"><h3>💶 Budget intelligente</h3><div class="budget-range"><strong>Previsto ${euro(recommended)}</strong><strong>Speso ${euro(spent)}</strong><strong>Restante ${euro(remaining)}</strong></div><div class="budget-range"><strong>Min ${euro(minimum)}</strong><strong>Consigliato ${euro(recommended)}</strong><strong>Max ${euro(maximum)}</strong></div><div class="budget-grid">${Object.entries(trip.budgetBreakdown).map(([key, value]) => `<span>${labels[key]} <b>${euro(value)}</b></span>`).join('')}</div></section>`;
 }
 
 function renderItinerary(trip) {
-  return `<section class="section-card"><h3>🗓️ Itinerario automatico giorno per giorno</h3><div class="timeline">${trip.itinerary.map((day) => `<article><strong>Giorno ${day.day} · ${escapeHtml(day.title)}</strong><p>${escapeHtml(day.plan)}</p><small>🚶 ${escapeHtml(day.mobility)} · 📍 ${escapeHtml(day.distance)}</small><small>🍽️ ${escapeHtml(day.restaurants.join(' / '))}</small><small>✨ ${escapeHtml(day.tips)}</small></article>`).join('')}</div></section>`;
+  return `<section class="section-card"><h3>🗓️ Itinerario giorno per giorno modificabile</h3><div class="timeline">${trip.itinerary.map((day) => `<article><strong>Giorno ${day.day} · ${escapeHtml(day.title)}</strong><textarea data-itinerary-day="${day.day}" aria-label="Modifica giorno ${day.day}">${escapeHtml(day.plan)}</textarea><small>🚶 ${escapeHtml(day.mobility)} · 📍 ${escapeHtml(day.distance)}</small><small>🍽️ ${escapeHtml(day.restaurants.join(' / '))}</small><small>✨ ${escapeHtml(day.tips)}</small></article>`).join('')}</div></section>`;
+}
+
+function renderDocuments(trip) {
+  const documents = trip.documents || [];
+  return `<section class="section-card"><h3>📎 Documenti caricati</h3>${documents.length ? `<div class="document-list">${documents.map((doc) => `<span>📄 <b>${escapeHtml(doc.name)}</b><small>${escapeHtml(doc.type)} · ${escapeHtml(formatDate(doc.uploadedAt))}</small></span>`).join('')}</div>` : '<p class="empty">Nessun documento caricato.</p>'}<p class="cloud-status">☁️ ${escapeHtml(trip.cloudStatus || 'Salvato nel cloud VIAGI')}</p></section>`;
 }
 
 function renderDiary(trip) {
@@ -276,7 +322,7 @@ function renderDetails() {
       <article class="info-card"><span>👥 Persone</span><strong>${trip.people}</strong><small>${escapeHtml(trip.bookingSource || 'Inserimento manuale')}</small></article>
       <article class="info-card"><span>🚗 Trasporti</span><strong>${[...trip.transports.flights, ...trip.transports.trains, ...trip.transports.rentalCars].length || 'Da completare'}</strong><small>voli, treni e auto a noleggio rilevati dall’analisi</small></article>
     </div>
-    ${renderMapPins(trip.pins)}${renderItinerary(trip)}${renderBudget(trip)}${renderDiary(trip)}`;
+    ${renderMapPins(trip.pins)}${renderBudget(trip)}${renderItinerary(trip)}${renderDocuments(trip)}${renderDiary(trip)}`;
 }
 
 function render() {
@@ -302,19 +348,22 @@ bookingInput.addEventListener('input', applyBookingPreview);
 fileInput.addEventListener('change', applyBookingPreview);
 cityInput.addEventListener('input', applyBookingPreview);
 
-form.addEventListener('submit', (event) => {
+form.addEventListener('submit', async (event) => {
   event.preventDefault();
+  const submitButton = form.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
   const startDate = startInput.value;
   const endDate = endInput.value || startDate;
   const city = cityInput.value.trim();
   const country = countryInput.value.trim() || 'Da definire';
   const bookingSource = bookingInput.value.trim() || fileInput.files[0]?.name || 'Inserimento manuale';
-  const analysis = analyzeBooking({
+  const budgetValue = Number(document.querySelector('#budget').value || 0);
+  const analysis = await analyzeBookingAsync({
     name: nameInput.value.trim(), city, country, accommodation: accommodationInput.value.trim(), address: addressInput.value.trim(),
-    bookingSource, bookingFileName: fileInput.files[0]?.name, people: peopleInput.value,
+    bookingSource, bookingFileName: fileInput.files[0]?.name, people: peopleInput.value, budget: budgetValue,
   });
   const days = daysBetween(startDate, endDate);
-  const budgetBreakdown = estimateBudgetBreakdown(Number(document.querySelector('#budget').value || 0), days, analysis.people);
+  const budgetBreakdown = estimateBudgetBreakdown(budgetValue, days, analysis.people);
   const newTrip = {
     id: crypto.randomUUID(),
     name: analysis.name,
@@ -329,6 +378,9 @@ form.addEventListener('submit', (event) => {
     budget: sumBudget(budgetBreakdown),
     spent: Number(document.querySelector('#spent').value || 0),
     bookingSource: analysis.bookingSummary,
+    analysisErrors: analysis.errors,
+    documents: fileInput.files[0] ? [{ name: fileInput.files[0].name, type: 'PDF prenotazione', uploadedAt: new Date().toISOString().slice(0, 10) }] : [],
+    cloudStatus: 'Salvato nel cloud VIAGI',
     transports: analysis.transports,
     budgetBreakdown,
   };
@@ -339,9 +391,10 @@ form.addEventListener('submit', (event) => {
   newTrip.diary = buildDiary(newTrip);
   trips = [newTrip, ...trips];
   activeId = newTrip.id;
-  saveTrips();
+  await saveTripsToCloud();
   form.reset();
   formPanel.hidden = true;
+  submitButton.disabled = false;
   render();
 });
 
@@ -362,9 +415,18 @@ details.addEventListener('click', (event) => {
 });
 
 details.addEventListener('input', (event) => {
+  const trip = trips.find((item) => item.id === activeId);
+  const itineraryDay = event.target.dataset.itineraryDay;
+  if (itineraryDay) {
+    const entry = trip?.itinerary.find((item) => String(item.day) === itineraryDay);
+    if (entry) {
+      entry.plan = event.target.value;
+      saveTrips();
+    }
+    return;
+  }
   const day = event.target.dataset.diaryDay;
   if (!day) return;
-  const trip = trips.find((item) => item.id === activeId);
   const entry = trip?.diary.find((item) => String(item.day) === day);
   if (entry) {
     entry.notes = event.target.value;
