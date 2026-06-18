@@ -188,8 +188,8 @@ function ensureSeedData() {
 
 function isAdmin() { return currentUser?.role === 'admin'; }
 function getMembership(tripId) { return tripMembers.find((member) => member.tripId === tripId && member.userId === currentUser?.id); }
-function canViewTrip(trip) { return Boolean(currentUser && (isAdmin() || getMembership(trip.id))); }
-function canEditTrip(trip) { const membership = getMembership(trip.id); return Boolean(currentUser && (isAdmin() || (membership?.canEdit && trip.allowMemberEdit))); }
+function canViewTrip(trip) { return Boolean(currentUser && (trip.ownerId === currentUser.id || getMembership(trip.id) || isAdmin())); }
+function canEditTrip(trip) { return Boolean(currentUser && canViewTrip(trip)); }
 function getVisibleTrips() { return currentUser ? trips.filter(canViewTrip) : []; }
 function getTripCode(tripId) { return tripAccessCodes.find((item) => item.tripId === tripId); }
 function getTripMembers(tripId) { return tripMembers.filter((member) => member.tripId === tripId).map((member) => ({ ...member, user: users.find((user) => user.id === member.userId) })); }
@@ -365,18 +365,34 @@ function renderTripCard(trip) {
 }
 
 function renderTripGroups() {
-  const groups = [['past', '📚 Viaggi passati'], ['present', '🧭 Viaggi presenti / in corso'], ['future', '🔮 Viaggi futuri']];
+  const groups = [['present', 'In corso'], ['future', 'Prossimi'], ['past', 'Archivio']];
   tripGroups.innerHTML = groups.map(([status, title]) => {
     const items = getVisibleTrips().filter((trip) => getTripStatus(trip) === status);
     return `<section class="trip-group"><h3>${title}</h3>${items.length ? items.map(renderTripCard).join('') : '<p class="empty">Nessun viaggio in questa sezione.</p>'}</section>`;
   }).join('');
 }
 
-function renderMapPins(pins) {
-  return `<div class="map-card"><div class="map-bg" aria-label="Mappa con pin automatici">
-    ${(pins || []).slice(0, 10).map((pin, index) => `<a class="pin pin-${index + 1}" href="${escapeHtml(pin.mapsUrl)}" target="_blank" rel="noreferrer" title="Apri ${escapeHtml(pin.name)} in Google Maps">${pin.icon}</a>`).join('')}
-  </div><div class="pin-list">${(pins || []).map((pin) => `<a href="${escapeHtml(pin.mapsUrl)}" target="_blank" rel="noreferrer">${pin.icon} ${escapeHtml(pin.name)}</a>`).join('')}</div></div>`;
+function mapCenterFor(trip) {
+  const known = {
+    roma: [41.9028, 12.4964],
+    rome: [41.9028, 12.4964],
+    milano: [45.4642, 9.19],
+    venezia: [45.4408, 12.3155],
+    firenze: [43.7696, 11.2558],
+    napoli: [40.8518, 14.2681],
+    cagliari: [39.2238, 9.1217],
+  };
+  return known[String(trip.city || '').toLowerCase()] || [41.9028, 12.4964];
 }
+
+function renderMapPins(trip) {
+  const pins = trip.pins || [];
+  const [lat, lon] = mapCenterFor(trip);
+  const bbox = [lon - 0.035, lat - 0.025, lon + 0.035, lat + 0.025].join('%2C');
+  const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lon}`;
+  return `<section class="map-card premium-map"><div class="map-toolbar"><div><p class="eyebrow">Mappa live</p><h3>🗺️ Pin viaggio</h3></div><a class="ghost-button" href="${googleMapsUrl(`${trip.accommodation} ${trip.city}`)}" target="_blank" rel="noreferrer">Apri Google Maps</a></div><div class="real-map"><iframe title="Mappa di ${escapeHtml(trip.city)}" loading="lazy" src="${mapUrl}"></iframe>${pins.slice(0, 8).map((pin, index) => `<a class="map-pin map-pin-${index + 1}" href="${escapeHtml(pin.mapsUrl)}" target="_blank" rel="noreferrer" title="${escapeHtml(pin.name)}"><span><b>${pin.icon}</b></span></a>`).join('')}</div><div class="pin-list">${pins.map((pin) => `<a href="${escapeHtml(pin.mapsUrl)}" target="_blank" rel="noreferrer">${pin.icon} ${escapeHtml(pin.name)}</a>`).join('')}</div></section>`;
+}
+
 
 function renderBudget(trip) {
   const recommended = sumBudget(trip.budgetBreakdown);
@@ -410,37 +426,54 @@ function renderAdminTripTools(trip) {
   return `<section class="section-card admin-tools"><h3>🔐 Admin viaggio</h3><div class="admin-grid"><span>ID privato <b>${escapeHtml(trip.privateId)}</b></span><span>Codice viaggio univoco <b>${escapeHtml(code?.code || 'Da generare')}</b></span><span>Modifica utenti <b>${trip.allowMemberEdit ? 'Permessa' : 'Bloccata'}</b></span></div><button class="ghost-button" id="toggle-member-edit" type="button">${trip.allowMemberEdit ? 'Blocca modifiche utenti' : 'Permetti modifiche utenti'}</button><h4>Utenti collegati</h4><div class="member-list">${members.map((member) => `<span>${escapeHtml(member.user?.email || member.userId)} · ${escapeHtml(member.role)} · ${member.canEdit ? 'può modificare' : 'sola lettura'} · ${escapeHtml(formatDate(member.joinedAt.slice(0, 10)))}</span>`).join('') || '<span>Nessun utente collegato.</span>'}</div></section>`;
 }
 
+function renderTripEditor(trip) {
+  if (!canEditTrip(trip)) return '';
+  return `<section class="section-card quick-editor"><div class="panel-title"><div><p class="eyebrow">Modifica continua</p><h3>✏️ Aggiorna il viaggio</h3></div><button class="ghost-button" id="refresh-pins" type="button">Rigenera pin</button></div><div class="form-grid compact-editor">
+    <label>Nome<input data-trip-field="name" value="${escapeHtml(trip.name)}" /></label>
+    <label>Hotel / alloggio<input data-trip-field="accommodation" value="${escapeHtml(trip.accommodation)}" /></label>
+    <label>Indirizzo<input data-trip-field="address" value="${escapeHtml(trip.address)}" /></label>
+    <label>Dal<input data-trip-field="startDate" type="date" value="${escapeHtml(trip.startDate)}" /></label>
+    <label>Al<input data-trip-field="endDate" type="date" value="${escapeHtml(trip.endDate)}" /></label>
+    <label>Persone<input data-trip-field="people" type="number" min="1" value="${trip.people}" /></label>
+    <label>Budget previsto<input data-trip-field="budget" type="number" min="0" value="${trip.budget}" /></label>
+    <label>Speso<input data-trip-field="spent" type="number" min="0" value="${trip.spent}" /></label>
+  </div><label>Aggiungi hotel, tappe, note o prenotazioni<textarea data-trip-field="bookingSource" placeholder="Es. nuovo hotel, ristorante, parcheggio...">${escapeHtml(trip.bookingSource || '')}</textarea></label></section>`;
+}
+
 function renderDetails() {
   const visibleTrips = getVisibleTrips();
   const trip = visibleTrips.find((item) => item.id === activeId) || visibleTrips[0];
   if (!trip) {
-    details.innerHTML = currentUser ? '<p class="empty">Nessun viaggio autorizzato. Inserisci un codice viaggio fornito dall’amministratore.</p>' : '<p class="empty">Accedi o registrati per vedere i tuoi viaggi.</p>';
+    details.innerHTML = currentUser ? '<section class="empty-state"><h2>Inizia il tuo primo viaggio</h2><p>Aggiungi una prenotazione, un hotel o una destinazione: la schermata principale mostrerà solo il viaggio su cui stai lavorando.</p><button class="primary-action" id="empty-add-trip" type="button">+ Crea viaggio</button></section>' : '<p class="empty">Accedi o registrati per vedere i tuoi viaggi.</p>';
     return;
   }
-  details.innerHTML = `<div class="details-cover" style="background-image:url('${escapeHtml(trip.coverPhoto)}')">${isAdmin() ? '<button class="icon-button" id="delete-trip" aria-label="Elimina viaggio">🗑️</button>' : ''}</div>
-    <div class="details-head"><div><p class="eyebrow">${escapeHtml(tripDates(trip))} · ${daysBetween(trip.startDate, trip.endDate)} giorni</p><h2>${escapeHtml(trip.name)}</h2><p>${escapeHtml(trip.city)}, ${escapeHtml(trip.country)}</p></div></div>
+  activeId = trip.id;
+  details.innerHTML = `<div class="trip-hero-card"><div class="details-cover" style="background-image:url('${escapeHtml(trip.coverPhoto)}')"><button class="icon-button" id="delete-trip" aria-label="Elimina viaggio">🗑️</button></div>
+    <div class="details-head"><div><p class="eyebrow">${escapeHtml(tripDates(trip))} · ${daysBetween(trip.startDate, trip.endDate)} giorni</p><h2>${escapeHtml(trip.name)}</h2><p>${escapeHtml(trip.city)}, ${escapeHtml(trip.country)}</p></div><button class="primary-action" id="add-trip-inline" type="button">+ Nuovo</button></div></div>
     <div class="info-grid">
       <article class="info-card"><span>🏨 Alloggio</span><strong>${escapeHtml(trip.accommodation)}</strong><small>${escapeHtml(trip.address)}</small></article>
       <article class="info-card"><span>👥 Persone</span><strong>${trip.people}</strong><small>${escapeHtml(trip.bookingSource || 'Inserimento manuale')}</small></article>
-      <article class="info-card"><span>🚗 Trasporti</span><strong>${[...trip.transports.flights, ...trip.transports.trains, ...trip.transports.rentalCars].length || 'Da completare'}</strong><small>voli, treni e auto a noleggio rilevati dall’analisi</small></article>
+      <article class="info-card"><span>💶 Budget</span><strong>${euro(trip.budget)}</strong><small>Speso ${euro(trip.spent)} · resta ${euro(Number(trip.budget || 0) - Number(trip.spent || 0))}</small></article>
     </div>
-    ${renderAdminTripTools(trip)}${renderMapPins(trip.pins)}${renderBudget(trip)}${renderItinerary(trip)}${renderDocuments(trip)}${renderDiary(trip)}`;
+    ${renderTripEditor(trip)}${renderMapPins(trip)}${renderBudget(trip)}${renderItinerary(trip)}${renderDocuments(trip)}${renderDiary(trip)}`;
 }
+
 
 function renderAuthState() {
   const logged = Boolean(currentUser);
   authPanel.hidden = logged;
-  sessionPanel.hidden = !logged;
-  accessPanel.hidden = !logged || isAdmin();
+  sessionPanel.hidden = true;
+  accessPanel.hidden = true;
   formPanel.hidden = true;
-  addTripButton.hidden = !isAdmin();
-  firebaseRulesPanel.hidden = !logged;
+  addTripButton.hidden = !logged;
+  firebaseRulesPanel.hidden = true;
   dashboard.hidden = !logged;
   if (logged) {
     sessionUser.textContent = currentUser.email;
-    userRoleBadge.textContent = isAdmin() ? 'Admin' : 'Utente normale';
+    userRoleBadge.textContent = 'Area privata';
   }
 }
+
 
 function render() {
   renderAuthState();
@@ -497,11 +530,11 @@ accessForm.addEventListener('submit', (event) => {
 
 logoutButton.addEventListener('click', () => { currentUser = null; localStorage.removeItem(SESSION_KEY); activeId = undefined; render(); });
 
-addTripButton.addEventListener('click', () => {
-  if (!isAdmin()) return;
+function openTripForm() {
   formPanel.hidden = false;
   nameInput.focus();
-});
+}
+addTripButton.addEventListener('click', openTripForm);
 cancelTripButton.addEventListener('click', () => { formPanel.hidden = true; });
 bookingInput.addEventListener('input', applyBookingPreview);
 fileInput.addEventListener('change', applyBookingPreview);
@@ -578,7 +611,9 @@ details.addEventListener('click', (event) => {
     if (trip) { trip.allowMemberEdit = !trip.allowMemberEdit; saveTrips(); render(); }
     return;
   }
-  if (event.target.closest('#delete-trip') && isAdmin()) {
+  if (event.target.closest('#add-trip-inline') || event.target.closest('#empty-add-trip')) { openTripForm(); return; }
+  if (event.target.closest('#refresh-pins')) { const trip = trips.find((item) => item.id === activeId); if (trip && canEditTrip(trip)) { trip.pins = buildPins(trip); saveTrips(); render(); } return; }
+  if (event.target.closest('#delete-trip') && currentUser) {
     trips = trips.filter((trip) => trip.id !== activeId);
     activeId = getVisibleTrips()[0]?.id;
     saveTrips();
@@ -589,6 +624,15 @@ details.addEventListener('click', (event) => {
 details.addEventListener('input', (event) => {
   const trip = trips.find((item) => item.id === activeId);
   if (!trip || !canEditTrip(trip)) return;
+  const field = event.target.dataset.tripField;
+  if (field) {
+    const numeric = ['people', 'budget', 'spent'].includes(field);
+    trip[field] = numeric ? Number(event.target.value || 0) : event.target.value;
+    if (['accommodation', 'address', 'bookingSource'].includes(field)) trip.pins = buildPins(trip);
+    saveTrips();
+    renderTotals();
+    return;
+  }
   const itineraryDay = event.target.dataset.itineraryDay;
   if (itineraryDay) {
     const entry = trip?.itinerary.find((item) => String(item.day) === itineraryDay);
