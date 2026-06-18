@@ -11,19 +11,18 @@
     <main class="app-shell">
       <section class="hero">
         <div>
-          <p class="eyebrow">✈️ VIAGI · Viaggi Intelligente</p>
-          <h1>Il tuo assistente personale di viaggio.</h1>
+          <p class="eyebrow">VIAGI · Travel planner</p>
+          <h1>Organizza viaggi senza confusione.</h1>
           <p class="hero-copy">
-            Un’app mobile-first per organizzare il viaggio attivo: hotel, mappa reale con pin,
-            budget, documenti e itinerario sempre modificabili dal telefono.
+            Tutto in una schermata pulita: prenotazioni, tappe, mappa, budget e documenti sempre a portata di mano.
           </p>
           <div class="hero-actions">
-            <button class="primary-action" id="add-trip-button" type="button">+ Nuovo viaggio</button>
+            <button class="primary-action" id="add-trip-button" type="button">+ Crea viaggio</button>
             <span id="user-role-badge" class="role-badge">Area privata</span>
           </div>
         </div>
         <div class="summary-card">
-          <span>Budget totale previsto</span>
+          <span>Budget viaggi</span>
           <strong id="total-budget">€0</strong>
           <small id="total-spent">Speso €0 · Resta €0</small>
         </div>
@@ -40,7 +39,7 @@
       <section class="panel auth-panel" id="auth-panel">
         <div class="panel-title compact">
           <p class="eyebrow">Accesso</p>
-          <h2>Entra nella tua area viaggio</h2>
+          <h2>Accedi alla tua app di viaggio</h2>
           <p class="muted">Registrati o accedi per vedere il viaggio su cui stai lavorando. Account demo: <b>Ionut29019@gmail.com</b> / <b>P@dova29</b>.</p>
         </div>
         <div class="auth-grid">
@@ -128,7 +127,7 @@
 
       <section class="dashboard" id="dashboard" hidden>
         <aside class="panel trip-list-panel">
-          <div class="panel-title compact"><h2>Viaggi</h2><p class="muted">Seleziona rapidamente un altro viaggio.</p></div>
+          <div class="panel-title compact"><h2>Viaggi</h2><p class="muted">I tuoi viaggi salvati.</p></div>
           <div id="trip-groups" class="trip-groups"></div>
         </aside>
         <section class="panel details" id="trip-details" aria-live="polite"></section>
