@@ -53,6 +53,9 @@ let tripAccessCodes = loadTripAccessCodes();
 let tripMembers = loadTripMembers();
 let currentUser = loadSession();
 let activeId;
+let currentView = 'home';
+let selectedPinIndex = null;
+const manualExpenses = [];
 ensureSeedData();
 activeId = getVisibleTrips()[0]?.id;
 
@@ -440,34 +443,127 @@ function renderTripEditor(trip) {
   </div><label>Aggiungi hotel, tappe, note o prenotazioni<textarea data-trip-field="bookingSource" placeholder="Es. nuovo hotel, ristorante, parcheggio...">${escapeHtml(trip.bookingSource || '')}</textarea></label></section>`;
 }
 
+
+
+function navButton(view, icon, label) {
+  return `<button class="${currentView === view ? 'active' : ''}" type="button" data-view="${view}">${icon}<span>${label}</span></button>`;
+}
+
+function renderShell(content, options = {}) {
+  const title = options.title || 'VIAGI';
+  const subtitle = options.subtitle || (currentUser ? `Ciao, ${currentUser.email.split('@')[0]} 👋` : 'Accedi per salvare i tuoi viaggi');
+  return `<section class="mobile-app-view">
+    <header class="app-topbar"><button class="back-button" type="button" data-view="home">${currentView === 'home' ? '9:41' : '‹'}</button><div><p>${escapeHtml(subtitle)}</p><h1>${escapeHtml(title)}</h1></div><button class="bell-button app-bell" type="button" aria-label="Notifiche">🔔<span></span></button></header>
+    <main class="app-view-body">${content}</main>
+    <nav class="bottom-nav" aria-label="Navigazione principale">
+      ${navButton('home', '⌂', 'Home')}${navButton('map', '⌖', 'Mappa')}${navButton('trips', '▣', 'Viaggi')}${navButton('budget', '€', 'Budget')}${navButton('profile', '♙', 'Profilo')}
+    </nav>
+  </section>`;
+}
+
+function visibleOrMockTrips() {
+  const visible = getVisibleTrips();
+  return visible.length ? visible : normalizeTrips([{ ...starterTrips[0], id: 'mock-trip', ownerId: currentUser?.id || 'mock-user' }]);
+}
+
+function renderStatusTrips(status) {
+  const titles = { past: 'Viaggi passati', present: 'In corso', future: 'Prossimi viaggi' };
+  const items = visibleOrMockTrips().filter((trip) => getTripStatus(trip) === status);
+  return `<section class="mini-section"><h2>${titles[status]}</h2><div class="mini-trip-list">${items.length ? items.map((trip) => `<button class="mini-trip-card" type="button" data-trip-detail="${trip.id}"><img src="${escapeHtml(trip.coverPhoto)}" alt="${escapeHtml(trip.name)}"><span><b>${escapeHtml(trip.city)}</b><small>${escapeHtml(tripDates(trip))}</small></span></button>`).join('') : '<p class="empty-card">Nessun viaggio.</p>'}</div></section>`;
+}
+
+function renderHomeScreen() {
+  const trip = visibleOrMockTrips().find((item) => getTripStatus(item) === 'future') || visibleOrMockTrips()[0];
+  const content = `<section class="home-hero-card"><p>Ciao, Giulia! 👋</p><h2>Dove vuoi andare prossimamente?</h2><label class="search-pill"><span>⌕</span><input placeholder="Cerca destinazioni, hotel, attività..." /></label></section>
+    <button class="add-trip-cta" type="button" data-view="add">＋ Aggiungi viaggio</button>
+    <section class="mini-section"><div class="section-heading"><h2>Prossimo viaggio</h2><button type="button" data-trip-detail="${trip.id}">Vedi dettagli ›</button></div>
+      <article class="next-trip-card clickable" data-trip-detail="${trip.id}"><img src="${escapeHtml(trip.coverPhoto)}" alt="${escapeHtml(trip.name)}"><div><span class="countdown-badge">Tra 12 giorni</span><h3>${escapeHtml(trip.city)}</h3><p>${escapeHtml(trip.country)}</p><p>🗓️ ${escapeHtml(formatDate(trip.startDate))} – ${escapeHtml(formatDate(trip.endDate))}</p><p>✈️ ${escapeHtml(trip.transports?.flights?.[0] || 'Volo da confermare')}</p></div></article></section>
+    ${renderStatusTrips('present')}${renderStatusTrips('future')}${renderStatusTrips('past')}`;
+  return renderShell(content, { title: 'Home' });
+}
+
+function renderAddTripView() {
+  const content = `<form class="app-form" id="mobile-trip-form">
+    <label>PDF prenotazione<input name="pdf" type="file" accept="application/pdf"></label>
+    <label>Link Booking / Airbnb / volo<input name="source" type="url" placeholder="https://booking.com/... o link volo"></label>
+    <label>Codice viaggio amministratore<input name="code" placeholder="VIAGI-ABC123"></label>
+    <label>Città destinazione<input name="city" required placeholder="Es. Barcellona"></label>
+    <label>Dal<input name="start" type="date" required></label>
+    <label>Al<input name="end" type="date"></label>
+    <button class="primary-action" type="submit">Genera viaggio automaticamente</button>
+    <p class="form-note">Mock pronto per Firebase: PDF/link/codice vengono già raccolti e salvati in localStorage.</p>
+  </form>`;
+  return renderShell(content, { title: 'Aggiungi viaggio', subtitle: 'Importa prenotazioni o codice invito' });
+}
+
+function renderTripDetailView() {
+  const trip = visibleOrMockTrips().find((item) => item.id === activeId) || visibleOrMockTrips()[0];
+  const days = trip.itinerary?.length ? trip.itinerary : buildItinerary(trip);
+  const content = `<article class="detail-cover" style="background-image:url('${escapeHtml(trip.coverPhoto)}')"><span>${escapeHtml(tripDates(trip))}</span><h2>${escapeHtml(trip.name)}</h2><p>${escapeHtml(trip.city)}, ${escapeHtml(trip.country)}</p></article>
+    <div class="quick-actions"><button type="button" data-view="map">Apri mappa</button><button type="button" data-view="budget">Budget stimato</button><button type="button" data-docs>Documenti caricati</button></div>
+    <section class="info-card-grid"><article>🏨<b>${escapeHtml(trip.accommodation)}</b><small>${escapeHtml(trip.address)}</small></article><article>✈️<b>${escapeHtml(trip.transports?.flights?.[0] || 'Volo da confermare')}</b><small>Orari e terminal nel documento</small></article><article>🌆<b>${escapeHtml(trip.city)}</b><small>Attività e ristoranti inclusi</small></article></section>
+    <section class="mini-section"><h2>Programma giorno per giorno</h2><div class="day-list">${days.map((day) => `<article><span>Giorno ${day.day}</span><h3>${escapeHtml(day.title)}</h3><p>${escapeHtml(day.plan)}</p><small>🚶 ${escapeHtml(day.mobility)} · 📍 ${escapeHtml(day.distance)}</small></article>`).join('')}</div></section>`;
+  return renderShell(content, { title: trip.city, subtitle: 'Dettaglio viaggio' });
+}
+
+function pinColor(type) {
+  return { hotel: '#1769e0', airport: '#ff7a45', station: '#7c3aed', monument: '#16a34a', restaurant: '#f59e0b', beach: '#06b6d4' }[type] || '#64748b';
+}
+
+function renderMapView() {
+  const trip = visibleOrMockTrips().find((item) => item.id === activeId) || visibleOrMockTrips()[0];
+  const pins = (trip.pins?.length ? trip.pins : buildPins(trip)).slice(0, 8);
+  const selected = selectedPinIndex === null ? null : pins[selectedPinIndex];
+  const content = `<section class="mock-map">${pins.map((pin, index) => `<button class="colored-pin pin-pos-${index + 1}" style="--pin:${pinColor(pin.type)}" type="button" data-pin-index="${index}" aria-label="${escapeHtml(pin.name)}"><b>${pin.icon}</b></button>`).join('')}</section>
+    <div class="pin-legend"><span><i style="background:#1769e0"></i>Hotel</span><span><i style="background:#ff7a45"></i>Aeroporti</span><span><i style="background:#16a34a"></i>Attrazioni</span><span><i style="background:#f59e0b"></i>Ristoranti</span></div>
+    ${selected ? `<article class="pin-sheet"><h2>${escapeHtml(selected.name)}</h2><p>${escapeHtml(selected.label)} · ${escapeHtml(selected.address)}</p><a class="primary-action" href="${escapeHtml(selected.mapsUrl)}" target="_blank" rel="noreferrer">Naviga</a></article>` : '<article class="pin-sheet muted-sheet">Tocca un pin per vedere dettagli e navigazione.</article>'}`;
+  return renderShell(content, { title: 'Mappa viaggio', subtitle: trip.city });
+}
+
+function renderBudgetView() {
+  const trip = visibleOrMockTrips().find((item) => item.id === activeId) || visibleOrMockTrips()[0];
+  const breakdown = trip.budgetBreakdown || estimateBudgetBreakdown(trip.budget, daysBetween(trip.startDate, trip.endDate), trip.people);
+  const labels = { hotel: 'Hotel', transports: 'Voli e trasporti', fuel: 'Carburante', tolls: 'Pedaggi', food: 'Cibo', excursions: 'Attività', parking: 'Parcheggi', extras: 'Extra' };
+  const manualTotal = manualExpenses.reduce((sum, item) => sum + item.amount, 0);
+  const total = sumBudget(breakdown) + manualTotal;
+  const content = `<section class="budget-total"><span>Totale viaggio</span><strong>${euro(total)}</strong><small>Stima + spese manuali</small></section><div class="cost-list">${Object.entries(breakdown).map(([key, value]) => `<article><span>${labels[key] || key}</span><b>${euro(value)}</b></article>`).join('')}</div>
+    <form class="manual-expense-form" id="manual-expense-form"><input name="label" placeholder="Nuova spesa" required><input name="amount" type="number" min="1" placeholder="€" required><button type="submit">Aggiungi</button></form>
+    <div class="cost-list">${manualExpenses.map((item) => `<article><span>${escapeHtml(item.label)}</span><b>${euro(item.amount)}</b></article>`).join('') || '<p class="empty-card">Nessuna spesa manuale.</p>'}</div>`;
+  return renderShell(content, { title: 'Budget', subtitle: trip.city });
+}
+
+function renderTripsView() {
+  const content = `<button class="add-trip-cta" type="button" data-view="add">＋ Aggiungi viaggio</button>${renderStatusTrips('present')}${renderStatusTrips('future')}${renderStatusTrips('past')}`;
+  return renderShell(content, { title: 'I tuoi viaggi', subtitle: 'Passati, presenti e futuri' });
+}
+
+function renderProfileView() {
+  const adminCode = activeId ? getTripCode(activeId)?.code : '';
+  const content = currentUser ? `<section class="profile-card"><h2>${escapeHtml(currentUser.email)}</h2><p>Ruolo: ${escapeHtml(currentUser.role)}</p><button class="ghost-button" type="button" data-logout>Esci</button></section>
+    <section class="profile-card"><h3>Invita utenti</h3><p>L’amministratore può condividere questo codice viaggio.</p><strong>${escapeHtml(adminCode || 'Crea prima un viaggio')}</strong><button class="primary-action" type="button" data-copy-code>Crea / copia codice viaggio</button></section>` : `<div class="auth-grid mobile-auth"><form class="planner-form" id="mobile-register-form"><h3>Registrati</h3><label>Email<input name="email" type="email" required></label><label>Password<input name="password" type="password" minlength="6" required></label><button type="submit">Crea account</button></form><form class="planner-form" id="mobile-login-form"><h3>Login</h3><label>Email<input name="email" type="email" required value="Ionut29019@gmail.com"></label><label>Password<input name="password" type="password" required value="P@dova29"></label><button type="submit">Accedi</button></form></div>`;
+  return renderShell(content, { title: 'Profilo / Login', subtitle: currentUser ? 'Area privata' : 'Accedi o registrati' });
+}
+
 function renderDetails() {
-  const visibleTrips = getVisibleTrips();
-  const trip = visibleTrips.find((item) => item.id === activeId) || visibleTrips[0];
-  if (!trip) {
-    details.innerHTML = currentUser ? '<section class="empty-state"><h2>Inizia il tuo primo viaggio</h2><p>Aggiungi una prenotazione, un hotel o una destinazione: la schermata principale mostrerà solo il viaggio su cui stai lavorando.</p><button class="primary-action" id="empty-add-trip" type="button">+ Crea viaggio</button></section>' : '<p class="empty">Accedi o registrati per vedere i tuoi viaggi.</p>';
-    return;
-  }
-  activeId = trip.id;
-  details.innerHTML = `<div class="trip-hero-card"><div class="details-cover" style="background-image:url('${escapeHtml(trip.coverPhoto)}')"><button class="icon-button" id="delete-trip" aria-label="Elimina viaggio">🗑️</button></div>
-    <div class="details-head"><div><p class="eyebrow">${escapeHtml(tripDates(trip))} · ${daysBetween(trip.startDate, trip.endDate)} giorni</p><h2>${escapeHtml(trip.name)}</h2><p>${escapeHtml(trip.city)}, ${escapeHtml(trip.country)}</p></div><button class="primary-action" id="add-trip-inline" type="button">+ Crea</button></div></div>
-    <div class="info-grid">
-      <article class="info-card"><span>🏨 Alloggio</span><strong>${escapeHtml(trip.accommodation)}</strong><small>${escapeHtml(trip.address)}</small></article>
-      <article class="info-card"><span>👥 Persone</span><strong>${trip.people}</strong><small>${escapeHtml(trip.bookingSource || 'Inserimento manuale')}</small></article>
-      <article class="info-card"><span>💶 Budget</span><strong>${euro(trip.budget)}</strong><small>Speso ${euro(trip.spent)} · resta ${euro(Number(trip.budget || 0) - Number(trip.spent || 0))}</small></article>
-    </div>
-    ${renderTripEditor(trip)}${renderMapPins(trip)}${renderBudget(trip)}${renderItinerary(trip)}${renderDocuments(trip)}${renderDiary(trip)}`;
+  if (currentView === 'add') details.innerHTML = renderAddTripView();
+  else if (currentView === 'detail') details.innerHTML = renderTripDetailView();
+  else if (currentView === 'map') details.innerHTML = renderMapView();
+  else if (currentView === 'trips') details.innerHTML = renderTripsView();
+  else if (currentView === 'budget') details.innerHTML = renderBudgetView();
+  else if (currentView === 'profile') details.innerHTML = renderProfileView();
+  else details.innerHTML = renderHomeScreen();
 }
 
 
 function renderAuthState() {
   const logged = Boolean(currentUser);
-  authPanel.hidden = logged;
+  authPanel.hidden = true;
   sessionPanel.hidden = true;
   accessPanel.hidden = true;
   formPanel.hidden = true;
-  addTripButton.hidden = !logged;
+  addTripButton.hidden = true;
   firebaseRulesPanel.hidden = true;
-  dashboard.hidden = !logged;
+  dashboard.hidden = false;
   if (logged) {
     sessionUser.textContent = currentUser.email;
     userRoleBadge.textContent = 'Area privata';
@@ -477,9 +573,7 @@ function renderAuthState() {
 
 function render() {
   renderAuthState();
-  if (!currentUser) return;
-  renderTotals();
-  renderTripGroups();
+  if (currentUser) { renderTotals(); renderTripGroups(); }
   renderDetails();
 }
 
@@ -605,6 +699,15 @@ tripGroups.addEventListener('click', (event) => {
 });
 
 details.addEventListener('click', (event) => {
+  const viewButton = event.target.closest('[data-view]');
+  if (viewButton) { currentView = viewButton.dataset.view; selectedPinIndex = null; render(); return; }
+  const tripButton = event.target.closest('[data-trip-detail]');
+  if (tripButton) { activeId = tripButton.dataset.tripDetail; currentView = 'detail'; selectedPinIndex = null; render(); return; }
+  const pinButton = event.target.closest('[data-pin-index]');
+  if (pinButton) { selectedPinIndex = Number(pinButton.dataset.pinIndex); render(); return; }
+  if (event.target.closest('[data-docs]')) { alert('Documenti caricati: PDF prenotazione, biglietti e conferme hotel.'); return; }
+  if (event.target.closest('[data-logout]')) { currentUser = null; localStorage.removeItem(SESSION_KEY); activeId = undefined; currentView = 'profile'; render(); return; }
+  if (event.target.closest('[data-copy-code]')) { alert(`Codice viaggio: ${getTripCode(activeId)?.code || 'VIAGI-DEMO'}`); return; }
   if (event.target.closest('#toggle-member-edit')) {
     const trip = trips.find((item) => item.id === activeId);
     if (!trip || !isAdmin()) return;
@@ -648,6 +751,59 @@ details.addEventListener('input', (event) => {
   if (entry) {
     entry.notes = event.target.value;
     saveTrips();
+  }
+});
+
+
+details.addEventListener('submit', async (event) => {
+  const mobileTripForm = event.target.closest('#mobile-trip-form');
+  const manualExpenseForm = event.target.closest('#manual-expense-form');
+  const mobileRegisterForm = event.target.closest('#mobile-register-form');
+  const mobileLoginForm = event.target.closest('#mobile-login-form');
+  if (mobileTripForm) {
+    event.preventDefault();
+    const data = new FormData(mobileTripForm);
+    const codeValue = String(data.get('code') || '').trim().toUpperCase();
+    const code = tripAccessCodes.find((item) => item.code === codeValue);
+    const city = String(data.get('city') || 'Nuova destinazione').trim();
+    const startDate = data.get('start') || new Date().toISOString().slice(0, 10);
+    const endDate = data.get('end') || startDate;
+    const budgetBreakdown = estimateBudgetBreakdown(0, daysBetween(startDate, endDate), 2);
+    if (code && currentUser && !tripMembers.some((member) => member.tripId === code.tripId && member.userId === currentUser.id)) {
+      tripMembers.push({ id: crypto.randomUUID(), tripId: code.tripId, userId: currentUser.id, role: 'member', canEdit: false, joinedAt: new Date().toISOString(), accessCodeId: code.id });
+      activeId = code.tripId;
+    } else {
+      const newTrip = { id: crypto.randomUUID(), name: `Viaggio automatico a ${city}`, city, country: 'Da definire', coverPhoto: coverFor(city), startDate, endDate, accommodation: `Hotel selezionato a ${city}`, address: `${city}, centro`, people: 2, budget: sumBudget(budgetBreakdown), spent: 0, bookingSource: data.get('source') || data.get('pdf')?.name || 'Generato da mock AI', documents: data.get('pdf')?.name ? [{ name: data.get('pdf').name, type: 'PDF prenotazione', uploadedAt: new Date().toISOString().slice(0, 10) }] : [], transports: { flights: [`Volo per ${city} · orario da confermare`], trains: [], rentalCars: [] }, budgetBreakdown, ownerId: currentUser?.id || 'admin-demo', privateId: crypto.randomUUID(), allowMemberEdit: false };
+      newTrip.pins = buildPins(newTrip); newTrip.itinerary = buildItinerary(newTrip); newTrip.diary = buildDiary(newTrip);
+      trips = [newTrip, ...trips]; activeId = newTrip.id;
+      tripAccessCodes.push({ id: crypto.randomUUID(), tripId: newTrip.id, code: generateTripCode(), createdBy: newTrip.ownerId, createdAt: new Date().toISOString(), usedBy: [] });
+      tripMembers.push({ id: crypto.randomUUID(), tripId: newTrip.id, userId: newTrip.ownerId, role: 'admin', canEdit: true, joinedAt: new Date().toISOString(), accessCodeId: null });
+    }
+    saveTrips(); saveAccessCodes(); saveTripMembers(); currentView = 'detail'; render();
+    return;
+  }
+  if (manualExpenseForm) {
+    event.preventDefault();
+    const data = new FormData(manualExpenseForm);
+    manualExpenses.push({ label: String(data.get('label')), amount: Number(data.get('amount') || 0) });
+    render();
+    return;
+  }
+  if (mobileRegisterForm) {
+    event.preventDefault();
+    const email = mobileRegisterForm.querySelector('[name="email"]').value.trim().toLowerCase();
+    const password = mobileRegisterForm.querySelector('[name="password"]').value;
+    if (!users.some((user) => user.email === email)) users.push({ id: crypto.randomUUID(), email, password, role: 'user', createdAt: new Date().toISOString() });
+    saveUsers(); currentUser = users.find((user) => user.email === email); localStorage.setItem(SESSION_KEY, currentUser.id); activeId = getVisibleTrips()[0]?.id; currentView = 'home'; render();
+    return;
+  }
+  if (mobileLoginForm) {
+    event.preventDefault();
+    const email = mobileLoginForm.querySelector('[name="email"]').value.trim().toLowerCase();
+    const password = mobileLoginForm.querySelector('[name="password"]').value;
+    const user = users.find((item) => item.email.toLowerCase() === email && item.password === password);
+    if (!user) { alert('Credenziali non valide.'); return; }
+    currentUser = user; localStorage.setItem(SESSION_KEY, user.id); activeId = getVisibleTrips()[0]?.id; currentView = 'home'; render();
   }
 });
 
