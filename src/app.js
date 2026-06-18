@@ -365,7 +365,7 @@ function renderTripCard(trip) {
 }
 
 function renderTripGroups() {
-  const groups = [['present', 'In corso'], ['future', 'Prossimi'], ['past', 'Archivio']];
+  const groups = [['present', 'In viaggio'], ['future', 'Prossimi viaggi'], ['past', 'Viaggi passati']];
   tripGroups.innerHTML = groups.map(([status, title]) => {
     const items = getVisibleTrips().filter((trip) => getTripStatus(trip) === status);
     return `<section class="trip-group"><h3>${title}</h3>${items.length ? items.map(renderTripCard).join('') : '<p class="empty">Nessun viaggio in questa sezione.</p>'}</section>`;
@@ -390,7 +390,7 @@ function renderMapPins(trip) {
   const [lat, lon] = mapCenterFor(trip);
   const bbox = [lon - 0.035, lat - 0.025, lon + 0.035, lat + 0.025].join('%2C');
   const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat}%2C${lon}`;
-  return `<section class="map-card premium-map"><div class="map-toolbar"><div><p class="eyebrow">Mappa live</p><h3>🗺️ Pin viaggio</h3></div><a class="ghost-button" href="${googleMapsUrl(`${trip.accommodation} ${trip.city}`)}" target="_blank" rel="noreferrer">Apri Google Maps</a></div><div class="real-map"><iframe title="Mappa di ${escapeHtml(trip.city)}" loading="lazy" src="${mapUrl}"></iframe>${pins.slice(0, 8).map((pin, index) => `<a class="map-pin map-pin-${index + 1}" href="${escapeHtml(pin.mapsUrl)}" target="_blank" rel="noreferrer" title="${escapeHtml(pin.name)}"><span><b>${pin.icon}</b></span></a>`).join('')}</div><div class="pin-list">${pins.map((pin) => `<a href="${escapeHtml(pin.mapsUrl)}" target="_blank" rel="noreferrer">${pin.icon} ${escapeHtml(pin.name)}</a>`).join('')}</div></section>`;
+  return `<section class="map-card premium-map"><div class="map-toolbar"><div><p class="eyebrow">Mappa live</p><h3>Mappa e luoghi salvati</h3></div><a class="ghost-button" href="${googleMapsUrl(`${trip.accommodation} ${trip.city}`)}" target="_blank" rel="noreferrer">Apri Google Maps</a></div><div class="real-map"><iframe title="Mappa di ${escapeHtml(trip.city)}" loading="lazy" src="${mapUrl}"></iframe>${pins.slice(0, 8).map((pin, index) => `<a class="map-pin map-pin-${index + 1}" href="${escapeHtml(pin.mapsUrl)}" target="_blank" rel="noreferrer" title="${escapeHtml(pin.name)}"><span><b>${pin.icon}</b></span></a>`).join('')}</div><div class="pin-list">${pins.map((pin) => `<a href="${escapeHtml(pin.mapsUrl)}" target="_blank" rel="noreferrer">${pin.icon} ${escapeHtml(pin.name)}</a>`).join('')}</div></section>`;
 }
 
 
@@ -401,34 +401,34 @@ function renderBudget(trip) {
   const minimum = Math.round(recommended * 0.82);
   const maximum = Math.round(recommended * 1.25);
   const labels = { hotel: 'Hotel', transports: 'Trasporti', fuel: 'Benzina', tolls: 'Pedaggi', food: 'Cibo', excursions: 'Escursioni', parking: 'Parcheggi', extras: 'Extra' };
-  return `<section class="section-card"><h3>💶 Budget intelligente</h3><div class="budget-range"><strong>Previsto ${euro(recommended)}</strong><strong>Speso ${euro(spent)}</strong><strong>Restante ${euro(remaining)}</strong></div><div class="budget-range"><strong>Min ${euro(minimum)}</strong><strong>Consigliato ${euro(recommended)}</strong><strong>Max ${euro(maximum)}</strong></div><div class="budget-grid">${Object.entries(trip.budgetBreakdown).map(([key, value]) => `<span>${labels[key]} <b>${euro(value)}</b></span>`).join('')}</div></section>`;
+  return `<section class="section-card"><h3>Budget</h3><div class="budget-range"><strong>Previsto ${euro(recommended)}</strong><strong>Speso ${euro(spent)}</strong><strong>Restante ${euro(remaining)}</strong></div><div class="budget-range"><strong>Min ${euro(minimum)}</strong><strong>Consigliato ${euro(recommended)}</strong><strong>Max ${euro(maximum)}</strong></div><div class="budget-grid">${Object.entries(trip.budgetBreakdown).map(([key, value]) => `<span>${labels[key]} <b>${euro(value)}</b></span>`).join('')}</div></section>`;
 }
 
 function renderItinerary(trip) {
   const editable = canEditTrip(trip);
-  return `<section class="section-card"><h3>🗓️ Itinerario giorno per giorno ${editable ? 'modificabile' : 'in sola lettura'}</h3><div class="timeline">${trip.itinerary.map((day) => `<article><strong>Giorno ${day.day} · ${escapeHtml(day.title)}</strong><textarea data-itinerary-day="${day.day}" aria-label="Modifica giorno ${day.day}" ${editable ? '' : 'readonly'}>${escapeHtml(day.plan)}</textarea><small>🚶 ${escapeHtml(day.mobility)} · 📍 ${escapeHtml(day.distance)}</small><small>🍽️ ${escapeHtml(day.restaurants.join(' / '))}</small><small>✨ ${escapeHtml(day.tips)}</small></article>`).join('')}</div></section>`;
+  return `<section class="section-card"><h3>Itinerario ${editable ? 'modificabile' : 'in sola lettura'}</h3><div class="timeline">${trip.itinerary.map((day) => `<article><strong>Giorno ${day.day} · ${escapeHtml(day.title)}</strong><textarea data-itinerary-day="${day.day}" aria-label="Modifica giorno ${day.day}" ${editable ? '' : 'readonly'}>${escapeHtml(day.plan)}</textarea><small>🚶 ${escapeHtml(day.mobility)} · 📍 ${escapeHtml(day.distance)}</small><small>🍽️ ${escapeHtml(day.restaurants.join(' / '))}</small><small>✨ ${escapeHtml(day.tips)}</small></article>`).join('')}</div></section>`;
 }
 
 function renderDocuments(trip) {
   const documents = trip.documents || [];
-  return `<section class="section-card"><h3>📎 Documenti caricati</h3>${documents.length ? `<div class="document-list">${documents.map((doc) => `<span>📄 <b>${escapeHtml(doc.name)}</b><small>${escapeHtml(doc.type)} · ${escapeHtml(formatDate(doc.uploadedAt))}</small></span>`).join('')}</div>` : '<p class="empty">Nessun documento caricato.</p>'}<p class="cloud-status">☁️ ${escapeHtml(trip.cloudStatus || 'Salvato nel cloud VIAGI')}</p></section>`;
+  return `<section class="section-card"><h3>Documenti</h3>${documents.length ? `<div class="document-list">${documents.map((doc) => `<span>📄 <b>${escapeHtml(doc.name)}</b><small>${escapeHtml(doc.type)} · ${escapeHtml(formatDate(doc.uploadedAt))}</small></span>`).join('')}</div>` : '<p class="empty">Nessun documento caricato.</p>'}<p class="cloud-status">☁️ ${escapeHtml(trip.cloudStatus || 'Salvato nel cloud VIAGI')}</p></section>`;
 }
 
 function renderDiary(trip) {
   const editable = canEditTrip(trip);
-  return `<section class="section-card"><h3>📔 Diario di viaggio</h3><div class="diary-grid">${trip.diary.map((day) => `<article><strong>Giorno ${day.day}</strong><p>📷 Foto · 🎥 Video · 📝 Note · 💳 Spese ${euro(day.expenses)} · ⭐ ${day.rating || 'da valutare'}</p><textarea data-diary-day="${day.day}" placeholder="Scrivi note della giornata..." ${editable ? '' : 'readonly'}>${escapeHtml(day.notes)}</textarea></article>`).join('')}</div></section>`;
+  return `<section class="section-card"><h3>Diario di viaggio</h3><div class="diary-grid">${trip.diary.map((day) => `<article><strong>Giorno ${day.day}</strong><p>📷 Foto · 🎥 Video · 📝 Note · 💳 Spese ${euro(day.expenses)} · ⭐ ${day.rating || 'da valutare'}</p><textarea data-diary-day="${day.day}" placeholder="Scrivi note della giornata..." ${editable ? '' : 'readonly'}>${escapeHtml(day.notes)}</textarea></article>`).join('')}</div></section>`;
 }
 
 function renderAdminTripTools(trip) {
   if (!isAdmin()) return '';
   const code = getTripCode(trip.id);
   const members = getTripMembers(trip.id);
-  return `<section class="section-card admin-tools"><h3>🔐 Admin viaggio</h3><div class="admin-grid"><span>ID privato <b>${escapeHtml(trip.privateId)}</b></span><span>Codice viaggio univoco <b>${escapeHtml(code?.code || 'Da generare')}</b></span><span>Modifica utenti <b>${trip.allowMemberEdit ? 'Permessa' : 'Bloccata'}</b></span></div><button class="ghost-button" id="toggle-member-edit" type="button">${trip.allowMemberEdit ? 'Blocca modifiche utenti' : 'Permetti modifiche utenti'}</button><h4>Utenti collegati</h4><div class="member-list">${members.map((member) => `<span>${escapeHtml(member.user?.email || member.userId)} · ${escapeHtml(member.role)} · ${member.canEdit ? 'può modificare' : 'sola lettura'} · ${escapeHtml(formatDate(member.joinedAt.slice(0, 10)))}</span>`).join('') || '<span>Nessun utente collegato.</span>'}</div></section>`;
+  return `<section class="section-card admin-tools"><h3>Admin viaggio</h3><div class="admin-grid"><span>ID privato <b>${escapeHtml(trip.privateId)}</b></span><span>Codice viaggio univoco <b>${escapeHtml(code?.code || 'Da generare')}</b></span><span>Modifica utenti <b>${trip.allowMemberEdit ? 'Permessa' : 'Bloccata'}</b></span></div><button class="ghost-button" id="toggle-member-edit" type="button">${trip.allowMemberEdit ? 'Blocca modifiche utenti' : 'Permetti modifiche utenti'}</button><h4>Utenti collegati</h4><div class="member-list">${members.map((member) => `<span>${escapeHtml(member.user?.email || member.userId)} · ${escapeHtml(member.role)} · ${member.canEdit ? 'può modificare' : 'sola lettura'} · ${escapeHtml(formatDate(member.joinedAt.slice(0, 10)))}</span>`).join('') || '<span>Nessun utente collegato.</span>'}</div></section>`;
 }
 
 function renderTripEditor(trip) {
   if (!canEditTrip(trip)) return '';
-  return `<section class="section-card quick-editor"><div class="panel-title"><div><p class="eyebrow">Modifica continua</p><h3>✏️ Aggiorna il viaggio</h3></div><button class="ghost-button" id="refresh-pins" type="button">Rigenera pin</button></div><div class="form-grid compact-editor">
+  return `<section class="section-card quick-editor"><div class="panel-title"><div><p class="eyebrow">Dettagli viaggio</p><h3>Aggiorna il viaggio</h3></div><button class="ghost-button" id="refresh-pins" type="button">Rigenera pin</button></div><div class="form-grid compact-editor">
     <label>Nome<input data-trip-field="name" value="${escapeHtml(trip.name)}" /></label>
     <label>Hotel / alloggio<input data-trip-field="accommodation" value="${escapeHtml(trip.accommodation)}" /></label>
     <label>Indirizzo<input data-trip-field="address" value="${escapeHtml(trip.address)}" /></label>
@@ -449,7 +449,7 @@ function renderDetails() {
   }
   activeId = trip.id;
   details.innerHTML = `<div class="trip-hero-card"><div class="details-cover" style="background-image:url('${escapeHtml(trip.coverPhoto)}')"><button class="icon-button" id="delete-trip" aria-label="Elimina viaggio">🗑️</button></div>
-    <div class="details-head"><div><p class="eyebrow">${escapeHtml(tripDates(trip))} · ${daysBetween(trip.startDate, trip.endDate)} giorni</p><h2>${escapeHtml(trip.name)}</h2><p>${escapeHtml(trip.city)}, ${escapeHtml(trip.country)}</p></div><button class="primary-action" id="add-trip-inline" type="button">+ Nuovo</button></div></div>
+    <div class="details-head"><div><p class="eyebrow">${escapeHtml(tripDates(trip))} · ${daysBetween(trip.startDate, trip.endDate)} giorni</p><h2>${escapeHtml(trip.name)}</h2><p>${escapeHtml(trip.city)}, ${escapeHtml(trip.country)}</p></div><button class="primary-action" id="add-trip-inline" type="button">+ Crea</button></div></div>
     <div class="info-grid">
       <article class="info-card"><span>🏨 Alloggio</span><strong>${escapeHtml(trip.accommodation)}</strong><small>${escapeHtml(trip.address)}</small></article>
       <article class="info-card"><span>👥 Persone</span><strong>${trip.people}</strong><small>${escapeHtml(trip.bookingSource || 'Inserimento manuale')}</small></article>
