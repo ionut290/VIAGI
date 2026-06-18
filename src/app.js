@@ -440,22 +440,55 @@ function renderTripEditor(trip) {
   </div><label>Aggiungi hotel, tappe, note o prenotazioni<textarea data-trip-field="bookingSource" placeholder="Es. nuovo hotel, ristorante, parcheggio...">${escapeHtml(trip.bookingSource || '')}</textarea></label></section>`;
 }
 
+
+function renderDestinationCard(destination) {
+  return `<article class="destination-card" style="background-image:url('${escapeHtml(destination.photo)}')">
+    <button class="favorite-button" type="button" aria-label="Aggiungi ${escapeHtml(destination.name)} ai preferiti">♡</button>
+    <div><h3>${escapeHtml(destination.name)}</h3><p>${escapeHtml(destination.country)}</p><span>Da € ${destination.price}</span></div>
+  </article>`;
+}
+
+function renderHomeScreen(trip) {
+  const destinations = [
+    { name: 'Santorini', country: 'Grecia', price: 320, photo: 'https://images.unsplash.com/photo-1570077188670-e3a8d69ac5ff?auto=format&fit=crop&w=700&q=85' },
+    { name: 'Bali', country: 'Indonesia', price: 780, photo: 'https://images.unsplash.com/photo-1537996194471-e657df975ab4?auto=format&fit=crop&w=700&q=85' },
+    { name: 'New York', country: 'Stati Uniti', price: 450, photo: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?auto=format&fit=crop&w=700&q=85' },
+    { name: 'Amalfi', country: 'Italia', price: 290, photo: 'https://images.unsplash.com/photo-1533105079780-92b9be482077?auto=format&fit=crop&w=700&q=85' },
+  ];
+  const nextTrip = trip || {
+    name: 'Barcellona', city: 'Barcellona', country: 'Spagna', startDate: '2026-07-12', endDate: '2026-07-16',
+    coverPhoto: 'https://images.unsplash.com/photo-1583422409516-2895a77efded?auto=format&fit=crop&w=900&q=85',
+    transports: { flights: ['Milano MXP → Barcellona BCN'] },
+  };
+  return `<section class="home-screen">
+    <div class="status-row"><strong>9:41</strong><span>▮▮▮ ᯤ ▰</span></div>
+    <div class="home-hero">
+      <button class="bell-button" type="button" aria-label="Notifiche">🔔<span></span></button>
+      <p>Ciao, Giulia! 👋</p>
+      <h1>Dove vuoi andare prossimamente?</h1>
+      <label class="search-pill" aria-label="Cerca"><span>⌕</span><input placeholder="Cerca destinazioni, hotel, attività..." /></label>
+    </div>
+    <div class="home-content">
+      <nav class="category-row" aria-label="Categorie viaggio">
+        <button><span>✈️</span>Voli</button><button><span>🛏️</span>Hotel</button><button><span>🧭</span>Attività</button><button><span>🗺️</span>Esperienze</button><button><span>🚕</span>Noleggio auto</button>
+      </nav>
+      <div class="section-heading"><h2>Destinazioni consigliate</h2><a href="#">Vedi tutte ›</a></div>
+      <div class="destination-strip">${destinations.map(renderDestinationCard).join('')}</div>
+      <div class="section-heading"><h2>Prossimo viaggio</h2><a href="#">Vedi dettagli ›</a></div>
+      <article class="next-trip-card">
+        <img src="${escapeHtml(nextTrip.coverPhoto)}" alt="${escapeHtml(nextTrip.name)}" />
+        <div><span class="countdown-badge">Tra 12 giorni</span><h3>${escapeHtml(nextTrip.city || nextTrip.name)}</h3><p>${escapeHtml(nextTrip.country)}</p><p>🗓️ ${escapeHtml(formatDate(nextTrip.startDate))} – ${escapeHtml(formatDate(nextTrip.endDate))}</p><p>✈️ ${escapeHtml(nextTrip.transports?.flights?.[0] || 'Milano MXP → Barcellona BCN')}</p><button class="itinerary-button" type="button">Visualizza itinerario ›</button></div>
+      </article>
+    </div>
+    <nav class="bottom-nav" aria-label="Navigazione principale"><a class="active">⌂<span>Home</span></a><a>⌖<span>Esplora</span></a><a>▣<span>Prenotazioni</span></a><a>♡<span>Preferiti</span></a><a>♙<span>Profilo</span></a></nav>
+  </section>`;
+}
+
 function renderDetails() {
   const visibleTrips = getVisibleTrips();
   const trip = visibleTrips.find((item) => item.id === activeId) || visibleTrips[0];
-  if (!trip) {
-    details.innerHTML = currentUser ? '<section class="empty-state"><h2>Inizia il tuo primo viaggio</h2><p>Aggiungi una prenotazione, un hotel o una destinazione: la schermata principale mostrerà solo il viaggio su cui stai lavorando.</p><button class="primary-action" id="empty-add-trip" type="button">+ Crea viaggio</button></section>' : '<p class="empty">Accedi o registrati per vedere i tuoi viaggi.</p>';
-    return;
-  }
-  activeId = trip.id;
-  details.innerHTML = `<div class="trip-hero-card"><div class="details-cover" style="background-image:url('${escapeHtml(trip.coverPhoto)}')"><button class="icon-button" id="delete-trip" aria-label="Elimina viaggio">🗑️</button></div>
-    <div class="details-head"><div><p class="eyebrow">${escapeHtml(tripDates(trip))} · ${daysBetween(trip.startDate, trip.endDate)} giorni</p><h2>${escapeHtml(trip.name)}</h2><p>${escapeHtml(trip.city)}, ${escapeHtml(trip.country)}</p></div><button class="primary-action" id="add-trip-inline" type="button">+ Crea</button></div></div>
-    <div class="info-grid">
-      <article class="info-card"><span>🏨 Alloggio</span><strong>${escapeHtml(trip.accommodation)}</strong><small>${escapeHtml(trip.address)}</small></article>
-      <article class="info-card"><span>👥 Persone</span><strong>${trip.people}</strong><small>${escapeHtml(trip.bookingSource || 'Inserimento manuale')}</small></article>
-      <article class="info-card"><span>💶 Budget</span><strong>${euro(trip.budget)}</strong><small>Speso ${euro(trip.spent)} · resta ${euro(Number(trip.budget || 0) - Number(trip.spent || 0))}</small></article>
-    </div>
-    ${renderTripEditor(trip)}${renderMapPins(trip)}${renderBudget(trip)}${renderItinerary(trip)}${renderDocuments(trip)}${renderDiary(trip)}`;
+  if (trip) activeId = trip.id;
+  details.innerHTML = renderHomeScreen(trip);
 }
 
 
